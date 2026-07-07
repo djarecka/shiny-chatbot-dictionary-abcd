@@ -18,7 +18,7 @@ Semantic search over the [ABCD Study](https://abcdstudy.org/) data dictionary. T
 
 ## How it works (in one paragraph)
 
-The app is R Shiny on top of a Python search backend, bridged by [reticulate](https://rstudio.github.io/reticulate/). Queries are encoded with [MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) quantized to ONNX int8 (~23 MB, runs on CPU via [onnxruntime](https://onnxruntime.ai/)). Corpus embeddings are **pre-baked** to fp16 NumPy arrays at build time, so search at runtime is a single matmul. The dictionary table for the UI is stored as Parquet and read by [`nanoparquet`](https://nanoparquet.r-lib.org/). A top-level `config.yml` is the single source of truth — `setup.sh`, `python/build_embeddings.py`, and `app.R` all read it, and the embeddings carry a `manifest.txt` recording the parquet they were built against so the UI refuses to start on drift. See [How it works](https://biplabendu.github.io/shiny-chatbot-dictionary-abcd/how-it-works/) for the full pipeline.
+The app is R Shiny on top of a Python search backend, bridged by [reticulate](https://rstudio.github.io/reticulate/). Queries are encoded with [MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) quantized to ONNX int8 (~23 MB, runs on CPU via [onnxruntime](https://onnxruntime.ai/)). Corpus embeddings are precomputed at build time as fp16 NumPy arrays, so runtime search reduces to a single matrix multiply. The dictionary table for the UI is stored as Parquet and read by [`nanoparquet`](https://nanoparquet.r-lib.org/). A top-level `config.yml` is the single source of truth for `setup.sh`, `python/build_embeddings.py`, and `app.R`. The embeddings carry a `manifest.txt` recording which Parquet file they were built against — if they drift, the app refuses to start. See [How it works](https://biplabendu.github.io/shiny-chatbot-dictionary-abcd/how-it-works/) for the full pipeline.
 
 ## Quickstart
 
@@ -38,7 +38,7 @@ Re-run `./setup.sh` whenever `config.yml`, `requirements.txt`, or the dictionary
 
 ## Switching ABCD releases
 
-Edit `config.yml` and point `dictionary.parquet` at a different file in `data/`, then re-run `./setup.sh`. `app.R` reads `config.yml` at startup, parses the version out of the filename (`dd-abcd-7_0.parquet` → `7.0`), and shows it in the title bar and header banner.
+To update the dictionary, edit `config.yml` to point `dictionary.parquet` at a different file in `data/`, then re-run `./setup.sh`. The App reads the version from the filename at startup (`dd-abcd-7_0.parquet` → `7.0`), and shows it in the title bar and header banner.
 
 ```yaml
 dictionary:
@@ -57,32 +57,6 @@ dictionary:
 
 The deploy script verifies prerequisites, cross-checks `data/embeddings/manifest.txt` against `config.yml`, previews the bundle, and runs `rsconnect::deployApp` with manifest-based Python provisioning. See [Deployment](https://biplabendu.github.io/shiny-chatbot-dictionary-abcd/deployment/) for the full walkthrough and troubleshooting tips.
 
-## Repo layout
-
-```
-config.yml                  single source of truth (Python version, model, dictionary release)
-app.R                       Shiny UI + reticulate bridge — reads config.yml
-.Rprofile                   activates renv locally; deferred to manifest on shinyapps.io
-requirements.txt            Python runtime deps (onnxruntime, tokenizers, numpy)
-renv.lock                   R package versions
-
-www/
-  app.css                   app styling (layout, brand polish, responsive rules)
-  app.js                    client-side behavior (search shortcuts, tour, mobile, copy)
-
-python/
-  backend.py                semantic_search() — runtime
-  build_embeddings.py       reads config.yml; bakes model + .npy + .npz + manifest.txt
-  model/                    ONNX model + tokenizer (downloaded by build script)
-
-data/
-  dd-abcd-7_0.parquet       UI table for the active release (snappy-compressed)
-  embeddings/               *.npy (fp16 embeddings) + *.npz (metadata) + manifest.txt
-  *.csv                     raw source CSVs — gitignored, build inputs only
-
-setup.sh / run.sh / deploy.sh
-docs/  mkdocs.yml           documentation site (deployed to GitHub Pages)
-```
 
 ## Versions
 
